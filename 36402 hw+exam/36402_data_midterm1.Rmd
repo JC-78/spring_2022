@@ -1,0 +1,246 @@
+---
+title: "36-402 DA Exam 1"
+author: "Joong Ho Choi (joonghoc)"
+date: "March 25, 2022"
+output: pdf_document
+linestretch: 1.241
+fontsize: 12pt
+fontfamily: mathpazo
+---
+
+
+```{r setup, include = FALSE}
+# By default, do not include R source code in the PDF. We do not want to see
+# code, only your text and figures.
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+# 1 Introduction
+
+For cities to improve their economies and subsequently their standards of living, it is essential they understand what drives their economic growths. urban hierarchy hypothesis claims economically productive companies tend to be in large cities, and they are responsible for cities' large GMPs. On the other hand, power law scaling hypothesis states that larger cities are more economically productive than small ones due to larger production capabilities brought through larger population. Is city's economic growth driven by simply having larger population or having businesses with skilled workers? This knowledge is also paramount to companies in general, as they can use this knowledge to benefit from requesting tax breaks when they move into new cities. Our client is one of those companies; our client is a huge technology company with thousands of highly skilled employees. The company is considering moving its headquarters to a large city. If the urban hierarchy hypothesis is true, they can claim that moving to the city will improve its economy, and so the city should give them huge tax breaks to convince them to move there. To enjoy this benefit, our client is interested in testing which of the two hypothesis is true. Given a dataset that contains information about the economies of 133 cities in the United States, we will investigate if the urban hierarchy hypothesis is true or not **(1)** and if power law scaling hypothesis is true or not **(2)**.
+
+Our analysis led us to the conclusion that gross metropolitan product(GMP), which is the total economic output of a metropolitan statistical area, increases with more high-value businesses. Basically, the urban hierarchy hypothesis is true. On the other hand, with the given dataset, we found power law scaling hypothesis to be false. After accounting for the economic variables, we saw that log(pcgmp) and log(population) are negatively correlated. Considering how log transformation is monotonic transformation, we conclude that larger cities being more economically productive than small ones does not result from being larger. TIn conclusion, the economies of cities improve with size, because they attract more business that rely on highly skilled workers to provide expensive services. 
+
+# 2 Exploratory Data Analysis
+
+Our dataset contains data about the economies of 133 metropolitan statistical areas, which include cities and the areas surrounding them, in the United States. Relevant variables for our investigation are the followings:
+
+-MSA: Name of the metropolitan statistical area
+
+-pcgmp:The per-capita gross metropolitan product Y, in dollars
+
+-pop: The MSA’s population
+
+-finance: The share of the MSA’s economy that is in the financial industry (as a fraction between 0 and 1)
+
+-prof.tech: The share of the MSA’s economy that is in professional and technical services
+
+-ict: The share of the MSA’s economy that is in information, communication, and technology
+
+-management: The share of the MSA’s economy that is in corporate management
+
+
+```{r}
+df=read.csv("/Users/joonghochoi/Desktop/36402 data midterm 1/gmp.csv")
+df$log.pcgmp=log(df$pcgmp)
+df$log.pop=log(df$pop)
+```
+
+We began by examining the univariate distributions of the key variables(population as predictor and pcgmp as response) for power-law hypothesis. While pcgmp ranged from 15040 to 77260 with the mean of 32003.31, the population ranged from 54980 to 4487000 with the mean of 450485.60. Visually, it was clear to see that the histograms for both variables seem to be skewed to the right. Thus, to make them less skewed and give them more normality, we applied log transformation on the two variables.The desired effect was achieved, as the distribution became somewhat more symmetrical than before.
+
+```{r}
+library(ggplot2)
+par(mfrow = c(2, 2)) # Create a 2 x 2 plotting matrix
+hist(df$pcgmp,main="Histogram of pcgmp")
+hist(df$pop,main="Histogram of population",xlim=c(54980,4487000))
+hist(df$log.pcgmp)
+hist(df$log.pop)
+```
+**Figure 1**: Histograms showing the distributions of variables pcgmp and population before and after log transformation
+
+One thing that caught our attention is that 120 out of 133 data points have population of less than 1000000. This would be important
+to remember as we develop our models and make predictions/assumptions , since we do not have sucient data on metropolitan statistical area with population more than 1000000.
+
+Then, for multivariate visualization, we created a pairwise plot to visualize the relationships between relevant continuous variables. The scatterplots between pcgmp and population reinforced the idea that log transformation on these two variables would be good. 
+
+```{r}
+tmp<-df[,c("pcgmp","pop", "finance","prof.tech","ict","management")]
+pairs(tmp,pch=19)
+```  
+**Figure 2**: Scatterplot matrix showing relationships between relevant continuous variables
+
+Interestingly, while finance, prof.tech and ict had somewhat clear positive correlationship with pcgmp, management was the only economic variable that had unclear relationship with the pcgmp. This perhaps suggests that management might not be helpful in predicting pcgmp and it is worth noting for future investigations.
+
+# Modeling & Diagnostics
+
+For our model 1, we constructed a linear model to test the power-law hypothesis that our client asked us. To be specific, we fitted the power-law-scaling model to relate pcgmp to population size, using the appropriate log transformations to pcgmp and pop. **2**
+
+**Linear**: log(pcgmp)~$beta_0$+$beta_1$*log(pop)
+
+After establishing model 1, we constructed a flexible kernel smoother to predict pcgmp from the four economic variables for our model 2, in order to test urban hierarchy hypothesis. Again, we had pcgmp log-transformed. The relationships between the four economic variables and log.pcgmp are shown below. **1**
+
+```{r}
+model1<-lm(log.pcgmp~log.pop,data=df)
+```
+   
+
+```{r message=FALSE}
+library(np)
+bw <- apply(df[,c(5,6,7,8)], 2, sd) / nrow(df)^(0.2)
+model2 <- npreg(log.pcgmp ~ finance+prof.tech+ict+management, data = df, bws = bw[c(1,2,3,4)])
+```
+
+From our model diagnostics below, we see some violations of the model assumptions for both models. 
+
+```{r}
+par(mfrow = c(2, 2))
+plot(model1,which=1)
+plot(model1,which=2)
+
+plot(fitted(model2),residuals(model2),main="Residuals vs Fitted for \n kernel smoother")
+abline(0,0)
+qqnorm(residuals(model2),main="Normal Q-Q for kernel smoother")
+qqline(residuals(model2))
+
+```
+**Figure 3**: Diagnostic plots analyzing fitted values versus respective residuals and QQ-plots for models 1 and 2
+
+For both models' residuals plots, the residuals are not equally spread out, so we know both violate the homoscedasticity assumption. Heteroscedasticity is a problem because ordinary least squares (OLS) regression assumes that all residuals are drawn from a population that has a constant variance. This might affect the confidence intervals of the two models' predictions to be less reliable. Moreover, see violation of normality in normal quantile-quantile(QQ) plots.While residuals deviate from the dotted line by slight amount at the left and the right tails for model 1, the residuals deviate by great amount for model 2. The fact that the residuals are not completely normal does slightly undermine the validity of each model's ability to perform inference. Although non-normality is ok when sample size is large, it might not be applicable to us, given that our dataset is size of 133. 
+
+```{r}
+set.seed(42)
+s<-sample(rep(1:10,length.out=nrow(df)),replace=FALSE)
+prederr<-matrix(NA,nrow=10)
+
+for (i in 1:10){
+   test_data<-df[s==i,]
+   train_data<-df[!(s==i),]
+   model<-lm((log.pcgmp)~I(log.pop),data=train_data)
+   prederr[i,1]<-mean((exp(predict(model,newdata=test_data))-test_data$pcgmp)^2)
+}
+
+#apply(prederr,2,mean) #MSE 74422791
+#apply(prederr,2,sd)/sqrt(10) #standard errors 14902620
+```
+
+```{r}
+s<-sample(rep(1:10,length.out=nrow(df)),replace=FALSE)
+prederr1<-matrix(NA,nrow=10)
+for (i in 1:10){
+   test_data<-df[s==i,]
+   train_data<-df[!(s==i),]
+   model<-npreg(log.pcgmp ~ finance+prof.tech+ict+management, data = train_data, bws = bw[c(1,2,3,4)])
+   prederr1[i,1]<-mean((exp(predict(model,newdata=test_data))-test_data$pcgmp)^2)
+}
+
+```
+```{r} 
+#prederr
+#apply(prederr1,2,mean) #MSE
+#apply(prederr1,2,sd)/sqrt(10) #standard errors 
+```
+
+We then performed a 10-fold cross-validation to estimate the prediction errors of both models in order to determine which model fits the data given that we were not able to come to a clear conclusion just from the diagnosticis and goodness-of-fit. Below in table 1, we see the results of our cross validation. Our kernel smoother had lower mean squared error(MSE) by 74382819 and lower standard error by 14900998.**1**
+
+Table 1: Estimated prediction error for each model and standard error based on 10-fold cross validation
+
+Results of CV | Linear Model | Kernel Smoother
+------------|--------|-----------
+Estimated MSE | 74422791   | 39971.97
+Standard Error | 14902620 | 1621.966
+
+Given the results of our cross-validation along with the fact that both models had very similar model diagnostics and nearly identical residuals, we decided that the kernel smoother would be better predicting pcgmp.**(1)**
+
+Our next interest would be to evaluate whether population size matters after the economic variables are accounted for. However, before proceeding to make a model 3, we need to consider one problem with our power-law-scaling models. If our goal is to predict pcgmp, using a log transformation lets us use linear regression to estimate the power law, but it is biased. Hence, it is worth investigating the quantifiable value of the bias present. We decided to quantify the bias in our model's estimates of pcgmp for cities the size of Pittsburgh, which has population size of 2361000 and is in between 50% and 75% percentiles of population range. 
+
+Our estimates of the population mean are less and less variable with increasing sample size, and they converge towards the true population value. For small samples, the typical sample mean tends to underestimate the true population value. However, regradlessness of the skewness of the sampling distribution with small n, the average of the 1000 simulations/experiments is very close to the population value, for all sample sizes
+
+From the diagnostic earlier on in Fig 3, we know the residuals are not completely normal; we do not know the distribution of the residuals. For bootstrap, we nonparametrically resampled rows, because the only assumption this approach makes is that the residuals are independent.Thus, we performed 1000 simulations, in which we bootstrapped 133 points to train a new estimator on and predict pcgmp for a city the size of Pittsburgh. We gathered 1000 prediction values, got the average and subtracted the Pittsburgh's pcgmp from the average to quantify the bias.
+
+Pittsburgh has pcgmp of 38350,whereas the average prediction of Pittsburgh's pcgmp from estimators modelled on bootstrapped data was 39971.97.
+The difference between the mean of the mean estimates and the population value is called bias. Thus, 1621.966 is the bias. 
+   
+```{r}
+set.seed(0)
+B<-1000
+rows=nrow(df) #133
+k<-data.frame(df[which(df$X==262),])
+k1<-data.frame(log.pop=k$log.pop)
+res=c()
+for (b in 1:B){
+   traind<-df[sample(rows,rows,replace=TRUE),]
+   out<-lm(log.pcgmp~log.pop,data=traind)
+   pred<-exp(predict(out,newdata=k1))
+   res=c(res,pred)
+}
+#(ans<-mean(res)) #39971.97
+#(bias=ans-38350) #1621.966
+
+```
+
+Now that we have quantified the bias present in our model, we constructed our 3rd model, a a linear regression of the *residuals* of the previous model 2 and population, with appropriate log transformation. To be specific, we applied log transformations to pcgmp and population. This is essentially equivalent to fitting the power-law model after accounting for the economic variables. For this model, it is worth noting that the p-value of log(pop) in model 3 was 0.119; as it was much greater than 0.05, the covariate was not considered as statistically significant.  **(2)** 
+   
+```{r}
+model3<-lm(residuals(model2)~log(pop),data=df)
+#plot(model3)
+```
+
+
+# Results
+
+Overall, between our linear model and kernel smoother, we observed better prediction performance from our non-parametric method that uses other economic variables to predict instead of using population. As shown in table 1, while the linear model(model 1) had the estimated MSE of 74422791 after 10-fold cross validation, the kernel smoother had the estimated MSE of 39971.97 after 10-fold cross validation. Our kernel smoother had lower MSE by 74382819 and lower standard error by 14900998. Considering these stark contrasts,it is likely that economic variables have more useful data information for prediction than population alone. In addition, through results of our bootstrap analysis, we determined the bias of model to be 1101.723. Therefore, we do not feel confident with model 1's suitability for predicting pcgmp and feel more confident regarding the model 2's suitability for predicting pcgmp. **(1)**
+
+Then, to evaluate whether population size matters after the economic variables are accounted for, we fitted  a linear model to the residuals of the economic model, using log N as a covariate. Using the coefficient from the summary of this model 3, we report -0.02387579 as an estimate of the scaling exponent. Then, considering how the residual plots earlier on seem to show that residuals depend on X, we used the bootstrap method of resampling whole cases to get good estimates of the uncertainty. As a result, we derived [-0.07652439 -0.01781071] to be the 95% confidence interval for the scaling exponent.After accounting for the economic variables, we see that log(pcgmp) and log(population) are negatively correlated. In addition, the interval does not contain zero, so this finding is statistically significant. This shows higher population size negatively affects pcgmp after the economic variables are accounted for. **(2)**
+
+```{r}
+k<-summary(model3)
+#k$coefficients[2,1] #estimate of the scaling exponent
+
+```
+
+```{r}
+resample <- function(x) {
+  return(sample(x, size = length(x), replace = TRUE))
+}
+
+resample.data.frame <- function(df1) {
+  return(df[resample(1:nrow(df1)), ])
+}
+
+coefs.lm <- function(df1) {
+   fit<-lm(residuals(model2)~log(pop),data=df1)
+   #fit<-lm(log.pcgmp~log.pop+residuals(model2),data=df1)
+   #return(exp(coefficients(fit)))
+   return(coefficients(fit))
+}
+
+samp.dist.cases <- replicate(1000,
+  coefs.lm(resample.data.frame(df)))
+
+pivotal.CIs <- function(orig_estimate, boots) {
+  qs <- apply(boots, 1, quantile, c(0.025, 0.975))
+
+  out <- cbind(2 * orig_estimate - qs[2, ],
+               2 * orig_estimate - qs[1, ])
+  colnames(out) <- c("2.5 %", "97.5 %")
+  return(out)
+}
+
+res<-pivotal.CIs(coefficients(model3),
+            samp.dist.cases)
+#res
+#resampling residuals and making new data
+#resample residuals, when residuals are i.i.d. 
+#resample data points, when data points are i.i.d. 
+#(Note that your bootstrap needs to account for uncertainty in both Model 2 and Model 3, which fits to Model 2's residuals.)
+
+```
+
+
+# Conclusions
+
+Through the findings from models 2 to 3, we can conclude the urban hierarchy hypothesis is true, meaning that economically productive companies in large cities are responsible for their large GMPs **(1)** .On the other hand, findings from models 1-3 show that power law scaling hypothesis is false, meaning larger cities' greater pcgmp do not result from large cities' ability to support more specialized businesses. **(2)**. Thus, the client can claim that the company moving to the city will improve the economy, and request the city to give them huge tax breaks to convince them to move there. 
+
+However, the client should be cautious when relying upon these findings to make accurate predictions for cities not present in the data due to several limitations. Firstly, the dataset's size is 133; in the grand scheme of things, the data's size is very small. From our EDA in Fig 1, we discovered how 120 out of 133 data points have population of less than 1000000; with this in mind, we should be cautious of using our models to predict the pcgmp of metropolitan statistical area with population more than 1000000. We should collect more data on cities not included in the dataset, hopefully those that have population of more than 1000000. Secondly, only four sectors(financial, professional and technical, information and communication and technology, corporate management) have been chosen for economic variables. For research purpose, it would be worth considering other sectors such as biotech and art. Lastly, there might be other confounding variables that we have not accounted for, which play pivotal roles in driving cities' economic growth. We should examine different research papers done on cities' economic growth and attempt to account for the influential variables covered in those papers.
+
